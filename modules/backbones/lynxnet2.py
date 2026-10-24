@@ -5,15 +5,27 @@ import torch.nn.functional as F
 from modules.commons.common_layers import SinusoidalPosEmb, SwiGLU, ATanGLU, Transpose, AdamWLinear
 from utils.hparams import hparams
 
+# Inspired by RWKV Channel Mix
+class ReLU2(nn.Module):
+    @staticmethod
+    def forward(x):
+        return F.relu(x) ** 2
 
 class LYNXNet2Block(nn.Module):
     def __init__(self, dim, expansion_factor, kernel_size=31, dropout=0., glu_type='swiglu'):
         super().__init__()
         inner_dim = int(dim * expansion_factor)
+        dim_exp = 2
         if glu_type == 'swiglu':
             _glu = SwiGLU()
         elif glu_type == 'atanglu':
             _glu = ATanGLU()
+        elif glu_type == 'relu':
+            _glu = nn.ReLU()
+            dim_exp = 1
+        elif glu_type == 'relu2':
+            _glu = ReLU2()
+            dim_exp = 1
         else:
             raise ValueError(f'{glu_type} is not a valid activation')
         if float(dropout) > 0.:
@@ -25,9 +37,9 @@ class LYNXNet2Block(nn.Module):
             Transpose((1, 2)),
             nn.Conv1d(dim, dim, kernel_size=kernel_size, padding=kernel_size // 2, groups=dim),
             Transpose((1, 2)),
-            nn.Linear(dim, inner_dim * 2),
+            nn.Linear(dim, inner_dim * dim_exp),
             _glu,
-            nn.Linear(inner_dim, inner_dim * 2),
+            nn.Linear(inner_dim, inner_dim * dim_exp),
             _glu,
             nn.Linear(inner_dim, dim),
             _dropout
